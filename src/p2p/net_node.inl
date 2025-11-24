@@ -1593,7 +1593,7 @@ bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(netwo
     return address.host_str();
   };
 
-  // 2. 获取节点列表并进行【端口去重】（这是唯一保留的去重逻辑）
+  // 2. 获取节点列表并进行【端口去重】
   std::vector<peerlist_entry> peers;
   std::unordered_set<std::string> hosts;
   size_t total_peers_size = 0;
@@ -1602,7 +1602,6 @@ bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(netwo
   {
     ++total_peers_size;
     const std::string host_string = get_host_string(peer.adr);
-    // 这里的去重仅针对同IP同端口的情况，或者同IP防止恶意刷屏，不涉及子网掩码
     if (hosts.insert(host_string).second)
     {
       peers.push_back(peer);
@@ -1615,14 +1614,12 @@ bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(netwo
     << ", i.e. dropping " << (total_peers_size - peers_size));
 
   // =================================================================================
-  //  CRITICAL CHANGE: 
-  //  此处已彻底删除 "connected_subnets", "subnet_mask", "subnet_peers", "step循环" 
-  //  以及产生 "subnet-deduplicated" 日志的所有代码。
+  //  [已移除] 所有子网去重逻辑 (subnet deduplication)
   // =================================================================================
 
   std::set<uint64_t> tried_peers;  // all peers ever tried
 
-  // 3. 外层重试循环 (最多尝试3次连接)
+  // 3. 外层重试循环
   size_t outer_loop_count = 0;
   while ((outer_loop_count < 3) && !zone.m_net_server.is_stop_signal_sent())
   {
@@ -1632,37 +1629,35 @@ bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(netwo
     
     std::vector<peerlist_entry> filtered;
 
-    // 4. 直接筛选候选人 (不进行任何子网过滤)
+    // 4. 直接筛选候选人 (不进行 C 类子网过滤)
     const size_t limit = use_white_list ? 20 : std::numeric_limits<size_t>::max();
     
     for (const peerlist_entry &peer : peers) {
       if (filtered.size() >= limit)
         break;
       
-      // 跳过本轮已经试过的
       if (tried_peers.count(peer.id))
         continue;
 
-      // 区块修剪(Pruning)逻辑检查
       if (next_needed_pruning_stripe == 0 || peer.pruning_seed == 0)
         filtered.push_back(peer);
       else if (next_needed_pruning_stripe == tools::get_pruning_stripe(peer.pruning_seed))
-        filtered.insert(filtered.begin(), peer); // 优先
+        filtered.insert(filtered.begin(), peer);
     }
 
     if (filtered.empty())
     {
+      // 【注意】这里的 "white" 和 "gray" 是字符串，用于打印日志，这是正确的
       MINFO("No available peer in " << (use_white_list ? "white" : "gray") << " list filtered by " << next_needed_pruning_stripe);
       return false;
     }
 
-    // 5. 随机选择一个候选人
+    // 5. 随机选择
     size_t random_index;
     if (use_white_list)
     {
       random_index = get_random_index_with_fixed_probability(filtered.size() - 1);
 
-      // 尝试复用之前的修剪节点 (Pruning Optimization)
       CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
       if (next_needed_pruning_stripe > 0 && next_needed_pruning_stripe <= (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES) && !m_used_stripe_peers[next_needed_pruning_stripe-1].empty())
       {
@@ -1689,11 +1684,11 @@ bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(netwo
 
     const peerlist_entry &candidate = filtered.at(random_index);
 
-    // 6. 最终检查与连接
     if (tried_peers.count(candidate.id))
       continue;
     tried_peers.insert(candidate.id);
 
+    // 【注意】这里的 "white" 和 "gray" 是字符串，用于日志记录，正确
     _note("Considering connecting (out) to " << (use_white_list ? "white" : "gray") << " list peer: " <<
         peerid_to_string(candidate.id) << " " << candidate.adr.str() << ", pruning seed " << epee::string_tools::to_string_hex(candidate.pruning_seed) <<
         " (stripe " << next_needed_pruning_stripe << " needed), in loop pass " << outer_loop_count);
@@ -1716,13 +1711,16 @@ bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(netwo
       continue;
     }
 
+    // 【注意】这里也是日志，用字符串正确
     MDEBUG("Selected peer: " << peerid_to_string(candidate.id) << " " << candidate.adr.str()
     << ", pruning seed " << epee::string_tools::to_string_hex(candidate.pruning_seed) << " "
     << "[peer_list=" << (use_white_list ? "white" : "gray")
     << "] last_seen: " << (candidate.last_seen ? epee::misc_utils::get_time_interval_string(time(NULL) - candidate.last_seen) : "never"));
 
     const time_t begin_connect = time(NULL);
-    if (!try_to_connect_and_handshake_with_new_peer(candidate.adr, false, candidate.last_seen, use_white_list ? "white" : "gray")) {
+    
+    // 【关键修改】这里是函数调用，必须去掉双引号，使用枚举值 white 或 gray
+    if (!try_to_connect_and_handshake_with_new_peer(candidate.adr, false, candidate.last_seen, use_white_list ? white : gray)) {
       time_t fail_connect = time(NULL);
       _note("Handshake failed after " << epee::misc_utils::get_time_interval_string(fail_connect - begin_connect));
       continue;
