@@ -39,6 +39,7 @@
 #include <boost/program_options/variables_map.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <chrono>
+#include <fstream>
 #include <functional>
 #include <utility>
 #include <vector>
@@ -435,6 +436,7 @@ namespace nodetool
 
     //debug functions
     std::string print_connections_container();
+    bool record_connections_to_file(std::ofstream& file);
 
 
   public:

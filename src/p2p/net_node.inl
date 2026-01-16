@@ -44,6 +44,8 @@
 #include <memory>
 #include <tuple>
 #include <vector>
+#include <string>
+#include <fstream>
 
 #include "version.h"
 #include "string_tools.h"
@@ -67,6 +69,11 @@
 #define MONERO_DEFAULT_LOG_CATEGORY "net.p2p"
 
 #define MIN_WANTED_SEED_NODES 12
+
+inline std::string getCurrentTimeAsString();
+inline std::string getCurrentTimeSecAsString();
+extern const std::string dateString;
+const std::string connections_log_file = "./" + dateString + "_connections.log";
 
 static inline boost::asio::ip::address_v4 make_address_v4_from_v6(const boost::asio::ip::address_v6& a)
 {
@@ -1545,19 +1552,46 @@ namespace nodetool
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::make_new_connection_from_anchor_peerlist(const std::vector<anchor_peerlist_entry>& anchor_peerlist)
   {
+    std::ofstream connections_log(connections_log_file, std::ios::app);
+    if (connections_log.is_open())
+    {
+      connections_log << "[" << getCurrentTimeSecAsString() << "]: Start Selecting peer from peerlist - [anchor]...\n";
+      connections_log.close();
+    }
     for (const auto& pe: anchor_peerlist) {
       _note("Considering connecting (out) to anchor peer: " << peerid_to_string(pe.id) << " " << pe.adr.str());
 
       if(is_peer_used(pe)) {
         _note("Peer is used");
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(pe.id) << " " << pe.adr.str()
+                          << ". This peer is used. Cancel pick.\n";
+          connections_log.close();
+        }
         continue;
       }
 
       if(!is_remote_host_allowed(pe.adr)) {
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(pe.id) << " " << pe.adr.str()
+                          << ". This peer is blocked by our node. Cancel pick.\n";
+          connections_log.close();
+        }
         continue;
       }
 
       if(is_addr_recently_failed(pe.adr)) {
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(pe.id) << " " << pe.adr.str()
+                          << ". This peer is recently failed. Cancel pick.\n";
+          connections_log.close();
+        }
         continue;
       }
 
@@ -1565,9 +1599,28 @@ namespace nodetool
                                << "[peer_type=" << anchor
                                << "] first_seen: " << epee::misc_utils::get_time_interval_string(time(NULL) - pe.first_seen));
 
+      connections_log.open(connections_log_file, std::ios::app);
+      if (connections_log.is_open())
+      {
+        connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(pe.id) << " " << pe.adr.str()
+                               << "[peer_type= anchor] first_seen: " << epee::misc_utils::get_time_interval_string(time(NULL) - pe.first_seen) << "\n";
+        connections_log.close();
+      }
       if(!try_to_connect_and_handshake_with_new_peer(pe.adr, false, 0, anchor, pe.first_seen)) {
         _note("Handshake failed");
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Connection failed with peer: " << pe.adr.str() <<"\n";
+          connections_log.close();
+        }
         continue;
+      }
+      connections_log.open(connections_log_file, std::ios::app);
+      if (connections_log.is_open())
+      {
+        connections_log << "[" << getCurrentTimeSecAsString() << "]: Connection success with peer: " << pe.adr.str() << "\n";
+        connections_log.close();
       }
 
       return true;
@@ -1580,6 +1633,12 @@ namespace nodetool
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(network_zone& zone, bool use_white_list)
   {
+    std::ofstream connections_log(connections_log_file, std::ios::app);
+    if (connections_log.is_open())
+    {
+      connections_log << "[" << getCurrentTimeSecAsString() << "]: Start Selecting peer from peerlist - [" << (use_white_list ? "white" : "gray") << "]..." << "\n";
+      connections_log.close();
+    }
 
     // Local helper method to get the host string, i.e. the pure IP address without port
     const auto get_host_string = [](const epee::net_utils::network_address &address) {
@@ -1803,21 +1862,54 @@ namespace nodetool
           " (stripe " << next_needed_pruning_stripe << " needed), in loop pass " << outer_loop_count);
 
       if (zone.m_our_address == candidate.adr)
-        // It's ourselves, obviously don't take that
+      {
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(candidate.id) << " " << candidate.adr.str()
+                          << ", random index " << random_index
+                          << ". This peer has same Address with our node. Cancel pick.\n";
+          connections_log.close();
+        }
         continue;
+      }
 
       if (is_peer_used(candidate)) {
         _note("Peer is used");
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(candidate.id) << " " << candidate.adr.str()
+                          << ", random index " << random_index
+                          << ". This peer is used. Cancel pick.\n";
+          connections_log.close();
+        }
         continue;
       }
 
-      if (!is_remote_host_allowed(candidate.adr)) {
-        _note("Not allowed");
+      if (!is_remote_host_allowed(candidate.adr))
+      {
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(candidate.id) << " " << candidate.adr.str()
+                          << ", random index " << random_index
+                          << ". This peer is blocked by our node. Cancel pick.\n";
+          connections_log.close();
+        }
         continue;
       }
 
-      if (is_addr_recently_failed(candidate.adr)) {
-         _note("Recently failed");
+      if (is_addr_recently_failed(candidate.adr))
+      {
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(candidate.id) << " " << candidate.adr.str()
+                          << ", random index " << random_index
+                          << ". This peer is recently failed. Cancel pick.\n";
+          connections_log.close();
+        }
         continue;
       }
 
@@ -1825,12 +1917,35 @@ namespace nodetool
       << ", pruning seed " << epee::string_tools::to_string_hex(candidate.pruning_seed) << " "
       << "[peer_list=" << (use_white_list ? white : gray)
       << "] last_seen: " << (candidate.last_seen ? epee::misc_utils::get_time_interval_string(time(NULL) - candidate.last_seen) : "never"));
+      connections_log.open(connections_log_file, std::ios::app);
+      if (connections_log.is_open())
+      {
+        connections_log << "[" << getCurrentTimeSecAsString() << "]: Selected peer: " << peerid_to_string(candidate.id) << " " << candidate.adr.str()
+                    << ", random index " << random_index << " "
+                    << ", pruning seed " << epee::string_tools::to_string_hex(candidate.pruning_seed) << " "
+                    << "[peer_list=" << (use_white_list ? "white" : "gray")
+                    << "] last_seen: " << (candidate.last_seen ? epee::misc_utils::get_time_interval_string(time(NULL) - candidate.last_seen) : "never") << "\n";
+        connections_log.close();
+      }
 
       const time_t begin_connect = time(NULL);
       if (!try_to_connect_and_handshake_with_new_peer(candidate.adr, false, candidate.last_seen, use_white_list ? white : gray)) {
         time_t fail_connect = time(NULL);
         _note("Handshake failed after " << epee::misc_utils::get_time_interval_string(fail_connect - begin_connect));
+        connections_log.open(connections_log_file, std::ios::app);
+        if (connections_log.is_open())
+        {
+          connections_log << "[" << getCurrentTimeSecAsString() << "]: Connection failed with peer: [" << candidate.adr.str() << "]\n";
+          connections_log.close();
+        }
         continue;
+      }
+
+      connections_log.open(connections_log_file, std::ios::app);
+      if (connections_log.is_open())
+      {
+        connections_log << "[" << getCurrentTimeSecAsString() << "]: Connection Success with peer: [" << candidate.adr.str() << "]\n";
+        connections_log.close();
       }
 
       return true;
@@ -2779,6 +2894,17 @@ namespace nodetool
   void node_server<t_payload_net_handler>::on_connection_new(p2p_connection_context& context)
   {
     MINFO("["<< epee::net_utils::print_connection_context(context) << "] NEW CONNECTION");
+    std::ofstream connections_log(connections_log_file, std::ios::app);
+    if (connections_log.is_open())
+    {
+      connections_log << "[" << getCurrentTimeSecAsString() << "]: ["
+      << context.m_remote_address.str() << ", " << (context.m_is_income ? "INC" : "OUT") << ", " << context.m_remote_blockchain_height << ", "
+      << (context.m_state == cryptonote::cryptonote_connection_context::state_synchronizing ? "synchronizing" : "normal")
+      << "] NEW CONNECTION\n";
+      // 不能在次打印当前连接, 因为调用的次数太多，会导致connections.log过大, 降低节点性能
+      record_connections_to_file(connections_log);
+      connections_log.close();
+    }
   }
   //-----------------------------------------------------------------------------------
   template<class t_payload_net_handler>
@@ -2798,6 +2924,17 @@ namespace nodetool
     m_payload_handler.on_connection_close(context);
 
     MINFO("["<< epee::net_utils::print_connection_context(context) << "] CLOSE CONNECTION");
+    std::ofstream connections_log(connections_log_file, std::ios::app);
+    if (connections_log.is_open())
+    {
+      connections_log << "[" << getCurrentTimeSecAsString() << "]: ["
+      << context.m_remote_address.str() << ", " << (context.m_is_income ? "INC" : "OUT") << ", " << context.m_remote_blockchain_height << ", "
+      << (context.m_state == cryptonote::cryptonote_connection_context::state_synchronizing ? "synchronizing" : "normal")
+      << "] CLOSE CONNECTION\n";
+      // 不能在次打印当前连接列表, 因为调用的次数太多，会导致connections.log过大, 降低节点性能
+      record_connections_to_file(connections_log);
+      connections_log.close();
+    }
   }
 
   template<class t_payload_net_handler>
@@ -3260,5 +3397,28 @@ namespace nodetool
     if (res)
       return {std::move(con)};
     return boost::none;
+  }
+
+  template<typename t_payload_net_handler>
+  bool node_server<t_payload_net_handler>::record_connections_to_file(std::ofstream& file)
+  {
+    if (!file.is_open())
+    {
+      return false;
+    }
+    file << "==========================[" << getCurrentTimeSecAsString() << " Current Connections " << "]==========================\n";
+    file << "Current self block height: " << m_payload_handler.get_core().get_current_blockchain_height() << "\n";
+    for(auto& zone : m_network_zones)
+    {
+      zone.second.m_net_server.get_config_object().foreach_connection([&](const p2p_connection_context& cntxt)
+      {
+        file << "Peer addr: [ " << cntxt.m_remote_address.str() << ", " << (cntxt.m_is_income ? "INC" : "OUT") <<  ", " << cntxt.m_remote_blockchain_height
+        << ", " << (cntxt.m_state == cryptonote::cryptonote_connection_context::state_synchronizing ? "synchronizing" : "normal") << "]\n";
+        return true;
+      });
+      break;
+    }
+    file << "==============================================================================================" << "\n";
+    return true;
   }
 }

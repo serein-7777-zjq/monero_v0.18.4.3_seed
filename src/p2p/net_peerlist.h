@@ -49,6 +49,45 @@
 #include "net/enums.h"
 #include "p2p_protocol_defs.h"
 #include "syncobj.h"
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+
+inline std::string getCurrentTimeAsString() {
+  // 获取当前时间的时间戳
+  auto now = std::chrono::system_clock::now();
+  std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+
+  // 将时间戳转换为本地时间
+  std::tm* localTime = std::localtime(&currentTime);
+
+  // 构建时间字符串
+  std::stringstream ss;
+  ss << std::put_time(localTime, "%Y-%m-%d");
+
+  return ss.str();
+}
+
+inline std::string getCurrentTimeSecAsString() {
+  // 获取当前时间的时间戳
+  auto now = std::chrono::system_clock::now();
+  std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+
+  // 将时间戳转换为本地时间
+  std::tm* localTime = std::localtime(&currentTime);
+
+  // 获取到毫秒
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+  // 构建时间字符串
+  std::stringstream ss;
+  ss << std::put_time(localTime, "%Y-%m-%d %H:%M:%S");
+  ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
+
+  return ss.str();
+}
+
+const std::string dateString = getCurrentTimeAsString();
 
 namespace nodetool
 {
