@@ -38,6 +38,7 @@
 
 #include <string>
 #include <vector>
+#include <functional>
 #include <boost/noncopyable.hpp>
 #include <boost/shared_ptr.hpp>
 #include <atomic>
@@ -81,7 +82,7 @@ namespace net_utils
 
   struct i_connection_limit
   {
-    virtual bool is_host_limit(const epee::net_utils::network_address &address)=0;
+    virtual bool is_host_limit(const epee::net_utils::network_address &address, std::string* reject_reason = nullptr)=0;
   protected:
     virtual ~i_connection_limit(){}
   };
@@ -280,6 +281,7 @@ namespace net_utils
 
       i_connection_filter* pfilter;
       i_connection_limit* plimit;
+      std::function<void(const network_address&, const char*)> incoming_connection_callback;
       std::size_t response_soft_limit;
       bool stop_signal_sent;
     };
@@ -390,6 +392,7 @@ namespace net_utils
 
     void set_connection_filter(i_connection_filter* pfilter);
     void set_connection_limit(i_connection_limit* plimit);
+    void set_incoming_connection_callback(std::function<void(const network_address&, const char*)> cb);
     void set_response_soft_limit(std::size_t limit);
 
     void set_default_remote(epee::net_utils::network_address remote)

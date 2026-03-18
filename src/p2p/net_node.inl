@@ -31,6 +31,7 @@
 // IP blocking adapted from Boolberry
 
 #include <algorithm>
+#include <cstring>
 #include <boost/bind/bind.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem/operations.hpp>
@@ -225,17 +226,21 @@ namespace nodetool
   }
   //-----------------------------------------------------------------------------------
   template<class t_payload_net_handler>
-  bool node_server<t_payload_net_handler>::is_host_limit(const epee::net_utils::network_address &address)
+  bool node_server<t_payload_net_handler>::is_host_limit(const epee::net_utils::network_address &address, std::string* reject_reason)
   {
     const network_zone& zone = m_network_zones.at(address.get_zone());
     if (zone.m_current_number_of_in_peers >= zone.m_config.m_net_config.max_in_connection_count) // in peers limit
     {
+      if (reject_reason)
+        *reject_reason = "max_in_peers";
       MWARNING("Exceeded max incoming connections, so dropping this one.");
       return true;
     }
 
     if(has_too_many_connections(address))
     {
+      if (reject_reason)
+        *reject_reason = "too_many_connections";
       MWARNING("CONNECTION FROM " << address.host_str() << " REFUSED, too many connections from the same address");
       return true;
     }
@@ -966,6 +971,8 @@ namespace nodetool
       m_config_folder = m_config_folder + "/" + public_zone.m_port;
     }
 
+    m_incoming_connection_logger.init(m_config_folder + "/monero_incoming_connections.log");
+
     res = init_config();
     CHECK_AND_ASSERT_MES(res, false, "Failed to init config.");
 
@@ -1002,6 +1009,16 @@ namespace nodetool
         std::string ipv6_port = "";
         zone.second.m_net_server.set_connection_filter(this);
         zone.second.m_net_server.set_connection_limit(this);
+        zone.second.m_net_server.set_incoming_connection_callback(
+          [this](const epee::net_utils::network_address& addr, const char* event) {
+            if (!m_incoming_connection_logger.is_initialized())
+              return;
+            const std::string addr_str = addr.host_str();
+            if (std::strcmp(event, "ATTEMPT") == 0)
+              m_incoming_connection_logger.log_attempt(addr_str);
+            else if (std::strncmp(event, "REJECTED:", 9) == 0)
+              m_incoming_connection_logger.log_rejected(addr_str, event + 9);
+          });
         MINFO("Binding (IPv4) on " << zone.second.m_bind_ip << ":" << zone.second.m_port);
         if (!zone.second.m_bind_ipv6_address.empty() && m_use_ipv6)
         {
@@ -2778,12 +2795,16 @@ namespace nodetool
   template<class t_payload_net_handler>
   void node_server<t_payload_net_handler>::on_connection_new(p2p_connection_context& context)
   {
+    if (context.m_is_income && m_incoming_connection_logger.is_initialized())
+      m_incoming_connection_logger.log_established(context.m_remote_address.host_str());
     MINFO("["<< epee::net_utils::print_connection_context(context) << "] NEW CONNECTION");
   }
   //-----------------------------------------------------------------------------------
   template<class t_payload_net_handler>
   void node_server<t_payload_net_handler>::on_connection_close(p2p_connection_context& context)
   {
+    if (context.m_is_income && m_incoming_connection_logger.is_initialized())
+      m_incoming_connection_logger.log_closed(context.m_remote_address.host_str(), "IN");
     network_zone& zone = m_network_zones.at(context.m_remote_address.get_zone());
     if (!zone.m_net_server.is_stop_signal_sent() && !context.m_is_income) {
       epee::net_utils::network_address na = AUTO_VAL_INIT(na);

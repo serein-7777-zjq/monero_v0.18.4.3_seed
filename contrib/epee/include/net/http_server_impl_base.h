@@ -147,7 +147,7 @@ namespace epee
 
   protected: 
 
-    virtual bool is_host_limit(const net_utils::network_address& na) override final
+    virtual bool is_host_limit(const net_utils::network_address& na, std::string* reject_reason = nullptr) override final
     {
       auto& config = m_net_server.get_config_object();
       CRITICAL_REGION_LOCAL(config.m_lock);
