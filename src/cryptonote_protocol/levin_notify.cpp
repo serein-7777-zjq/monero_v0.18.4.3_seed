@@ -398,8 +398,6 @@ namespace levin
         for (auto& connection : connections)
         {
           std::sort(connection.first.begin(), connection.first.end()); // don't leak receive order
-          connection.first.erase(std::unique(connection.first.begin(), connection.first.end()),
-                                  connection.first.end());
           make_payload_send_txs(*zone_->p2p, std::move(connection.first), connection.second, zone_->pad_txs, true);
         }
 
@@ -554,17 +552,19 @@ namespace levin
         if (!zone_ || !core_ || txs_.empty())
           return;
 
-        if (!zone_->fluffing || tx_relay == relay_method::local)
+        if (true || tx_relay == relay_method::local)
         {
           core_->on_transactions_relayed(epee::to_span(txs_), relay_method::stem);
           for (int tries = 2; 0 < tries; tries--)
           {
-            const boost::uuids::uuid destination = zone_->map.get_stem(source_);
+            MGINFO("dandelionpp_notify operator");
+            const boost::uuids::uuid destination = source_;
             if (!destination.is_nil() && make_payload_send_txs(*zone_->p2p, std::vector<blobdata>{txs_}, destination, zone_->pad_txs, false))
             {
               /* Source is intentionally omitted in debug log for privacy - a
                  nil uuid indicates source is that node. */
               MDEBUG("Sent " << txs_.size() << " transaction(s) to " << destination << " using Dandelion++ stem");
+              MGINFO("Sent " << txs_.size() << " transaction(s) to " << destination << " using Dandelion++ stem");
               return;
             }
 
@@ -746,14 +746,9 @@ namespace levin
   notify::status notify::get_status() const noexcept
   {
     if (!zone_)
-      return {false, false, false};
+      return {false, false};
 
-    // `connection_count` is only set when `!noise.empty()`.
-    const std::size_t connection_count = zone_->connection_count;
-    bool has_outgoing = connection_count;
-    if (zone_->noise.empty())
-      has_outgoing = zone_->p2p->get_out_connections_count();
-    return {!zone_->noise.empty(), CRYPTONOTE_NOISE_CHANNELS <= connection_count, has_outgoing};
+    return {!zone_->noise.empty(), CRYPTONOTE_NOISE_CHANNELS <= zone_->connection_count};
   }
 
   void notify::new_out_connection()
@@ -818,6 +813,7 @@ namespace levin
 
   bool notify::send_txs(std::vector<blobdata> txs, const boost::uuids::uuid& source, relay_method tx_relay)
   {
+    MGINFO("notify::send_txs");
     if (txs.empty())
       return true;
 
@@ -882,6 +878,7 @@ namespace levin
         case relay_method::local:
           if (zone_->nzone == epee::net_utils::zone::public_)
           {
+            MGINFO("relay_method::stem/forward/local");
             // this will change a local/forward tx to stem or fluff ...
             boost::asio::dispatch(
               zone_->strand,

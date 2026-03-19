@@ -2413,12 +2413,11 @@ namespace nodetool
       if (enet::zone::tor < network->first)
         break; // unknown network
 
-      const auto status = network->second.m_notifier.get_status();
-      if (network->second.m_connect && status.has_outgoing)
+      if (network->second.m_connect)
         return send(*network);
     }
 
-    MWARNING("Unable to send " << txs.size() << " transaction(s): anonymity networks had no outgoing connections");
+    // configuration should not allow this scenario
     return enet::zone::invalid;
   }
   //-----------------------------------------------------------------------------------
