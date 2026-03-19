@@ -2414,7 +2414,7 @@ namespace nodetool
         break; // unknown network
 
       const auto status = network->second.m_notifier.get_status();
-      if (network->second.m_connect && status.has_outgoing)
+      if (network->second.m_connect)
         return send(*network);
     }
 

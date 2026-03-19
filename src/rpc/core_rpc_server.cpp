@@ -1431,7 +1431,15 @@ namespace cryptonote
 
     NOTIFY_NEW_TRANSACTIONS::request r;
     r.txs.push_back(std::move(tx_blob));
-    m_core.get_protocol()->relay_transactions(r, boost::uuids::nil_uuid(), epee::net_utils::zone::invalid, relay_method::local);
+    std::list<connection_info> connections = m_p2p.get_payload_object().get_connections();
+    boost::uuids::uuid uuid_ = boost::uuids::nil_uuid();
+    size_t i = 1;
+    for (const auto& cnx : connections)
+    {
+      MGINFO("Peer [" << i << "]: [" << cnx.ip << "]");
+      m_core.get_protocol()->relay_transactions(r, uuid_, epee::net_utils::zone::public_, relay_method::fluff);
+      i++;
+    }
     //TODO: make sure that tx has reached other nodes here, probably wait to receive reflections from other nodes
     res.status = CORE_RPC_STATUS_OK;
     return true;
