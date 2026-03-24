@@ -133,8 +133,8 @@
 #define DEFAULT_RPC_SOFT_LIMIT_SIZE                     25 * 1024 * 1024 // 25 MiB
 #define MAX_RPC_CONTENT_LENGTH                          1048576 // 1 MB
 
-#define P2P_LOCAL_WHITE_PEERLIST_LIMIT                  500
-#define P2P_LOCAL_GRAY_PEERLIST_LIMIT                   2500
+#define P2P_LOCAL_WHITE_PEERLIST_LIMIT                  250
+#define P2P_LOCAL_GRAY_PEERLIST_LIMIT                   1250
 
 #define P2P_DEFAULT_CONNECTIONS_COUNT                   12
 #define P2P_DEFAULT_HANDSHAKE_INTERVAL                  60           //secondes
