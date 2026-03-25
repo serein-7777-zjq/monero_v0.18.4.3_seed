@@ -558,13 +558,12 @@ namespace levin
           for (int tries = 2; 0 < tries; tries--)
           {
             MGINFO("dandelionpp_notify operator");
-            const boost::uuids::uuid destination = source_;
+            const boost::uuids::uuid destination = zone_->map.get_stem(source_);
             if (!destination.is_nil() && make_payload_send_txs(*zone_->p2p, std::vector<blobdata>{txs_}, destination, zone_->pad_txs, false))
             {
               /* Source is intentionally omitted in debug log for privacy - a
                  nil uuid indicates source is that node. */
               MDEBUG("Sent " << txs_.size() << " transaction(s) to " << destination << " using Dandelion++ stem");
-              MGINFO("Sent " << txs_.size() << " transaction(s) to " << destination << " using Dandelion++ stem");
               return;
             }
 
