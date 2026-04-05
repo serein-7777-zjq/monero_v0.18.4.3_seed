@@ -89,6 +89,9 @@ inline std::string getCurrentTimeSecAsString() {
 
 const std::string dateString = getCurrentTimeAsString();
 
+/** Shared path for connection debug logs (single ODR definition via C++17 inline). */
+inline const std::string connections_log_file = "./" + dateString + "_connections.log";
+
 namespace nodetool
 {
   struct peerlist_types

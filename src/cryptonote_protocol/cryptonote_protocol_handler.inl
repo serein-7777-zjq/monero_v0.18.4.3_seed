@@ -85,9 +85,6 @@
 #define LAST_ACTIVITY_STALL_THRESHOLD (2.0f) // seconds
 #define DROP_PEERS_ON_SCORE -2
 
-// Log file path for connection logs
-static const std::string connections_log_file = "./" + dateString + "_connections.log";
-
 namespace cryptonote
 {
   template <class CryptoHashContainer>

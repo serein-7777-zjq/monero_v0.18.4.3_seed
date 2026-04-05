@@ -73,8 +73,6 @@
 
 inline std::string getCurrentTimeAsString();
 inline std::string getCurrentTimeSecAsString();
-extern const std::string dateString;
-const std::string connections_log_file = "./" + dateString + "_connections.log";
 
 static inline boost::asio::ip::address_v4 make_address_v4_from_v6(const boost::asio::ip::address_v6& a)
 {
