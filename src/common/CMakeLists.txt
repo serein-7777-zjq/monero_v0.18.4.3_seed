@@ -30,6 +30,7 @@ include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
 
 set(common_sources
   base58.cpp
+  eclipse_trace.cpp
   command_line.cpp
   dns_utils.cpp
   download.cpp
@@ -80,6 +81,10 @@ target_link_libraries(common
 target_include_directories(common
   PRIVATE
     ${Boost_INCLUDE_DIRS})
+
+if (ECLIPSE_TRACE)
+  target_compile_definitions(common PUBLIC ECLIPSE_TRACE)
+endif()
 
 #monero_install_headers(common
 #  ${common_headers})

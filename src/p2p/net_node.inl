@@ -50,6 +50,7 @@
 #include "version.h"
 #include "string_tools.h"
 #include "common/util.h"
+#include "common/eclipse_trace.h"
 #include "common/dns_utils.h"
 #include "common/pruning.h"
 #include "net/error.h"
@@ -973,6 +974,8 @@ namespace nodetool
       m_config_folder = m_config_folder + "/" + public_zone.m_port;
     }
 
+    eclipse_trace::set_data_dir(m_config_folder);
+
     res = init_config();
     CHECK_AND_ASSERT_MES(res, false, "Failed to init config.");
 
@@ -1437,6 +1440,7 @@ namespace nodetool
       LOG_PRINT_CC_PRIORITY_NODE(is_priority, bool(con), "Connect failed to " << na.str()
         /*<< ", try " << try_count*/);
       record_addr_failed(na);
+      eclipse_trace::uss_result(na.host_str(), na.port(), false, "tcp_failed", peer_type == gray);
       return false;
     }
 
@@ -1451,6 +1455,7 @@ namespace nodetool
         << na.str()
         /*<< ", try " << try_count*/);
       record_addr_failed(na);
+      eclipse_trace::uss_result(na.host_str(), na.port(), false, "handshake_rejected", peer_type == gray);
       return false;
     }
 
@@ -1458,6 +1463,7 @@ namespace nodetool
     {
       zone.m_net_server.get_config_object().close(con->m_connection_id);
       LOG_DEBUG_CC(*con, "CONNECTION HANDSHAKED OK AND CLOSED.");
+      eclipse_trace::uss_result(na.host_str(), na.port(), true, "success", peer_type == gray);
       return true;
     }
 
@@ -1483,6 +1489,7 @@ namespace nodetool
     zone.m_notifier.new_out_connection();
 
     LOG_DEBUG_CC(*con, "CONNECTION HANDSHAKED OK.");
+    eclipse_trace::uss_result(na.host_str(), na.port(), true, "success", peer_type == gray);
     return true;
   }
 
@@ -1926,6 +1933,20 @@ namespace nodetool
                     << "[peer_list=" << (use_white_list ? "white" : "gray")
                     << "] last_seen: " << (candidate.last_seen ? epee::misc_utils::get_time_interval_string(time(NULL) - candidate.last_seen) : "never") << "\n";
         connections_log.close();
+      }
+
+      {
+        const char *path = use_white_list
+          ? (eclipse_trace::consec_gray_fail_value() >= 3 ? "whitelist_fallback" : "whitelist_first")
+          : "graylist_first";
+        eclipse_trace::uss_select(
+          get_outgoing_connections_count(zone),
+          path,
+          total_peers_size,
+          filtered.size(),
+          candidate.adr.host_str(),
+          candidate.adr.port()
+        );
       }
 
       const time_t begin_connect = time(NULL);
@@ -3162,15 +3183,18 @@ namespace nodetool
       if (!zone.second.m_peerlist.get_random_gray_peer(pe))
         continue;
 
+      const size_t graylist_size = zone.second.m_peerlist.get_gray_peers_count();
       if (!check_connection_and_handshake_with_peer(pe.adr, pe.last_seen))
       {
         zone.second.m_peerlist.remove_from_peer_gray(pe);
         LOG_PRINT_L2("PEER EVICTED FROM GRAY PEER LIST: address: " << pe.adr.host_str() << " Peer ID: " << peerid_to_string(pe.id));
+        eclipse_trace::gray_housekeeping(graylist_size, pe.adr.host_str(), pe.adr.port(), "failed_tcp", false, true);
       }
       else
       {
         zone.second.m_peerlist.set_peer_just_seen(pe.id, pe.adr, pe.pruning_seed, pe.rpc_port, pe.rpc_credits_per_hash);
         LOG_PRINT_L2("PEER PROMOTED TO WHITE PEER LIST IP address: " << pe.adr.host_str() << " Peer ID: " << peerid_to_string(pe.id));
+        eclipse_trace::gray_housekeeping(graylist_size, pe.adr.host_str(), pe.adr.port(), "promoted", true, false);
       }
     }
     return true;

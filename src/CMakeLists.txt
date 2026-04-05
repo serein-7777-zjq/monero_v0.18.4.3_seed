@@ -83,6 +83,8 @@ endfunction ()
 include(Version)
 monero_add_library(version SOURCES ${CMAKE_BINARY_DIR}/version.cpp DEPENDS genversion)
 
+option(ECLIPSE_TRACE "Write JSONL USS/eclipse trace to <data-dir>/uss_trace.jsonl" OFF)
+
 add_subdirectory(common)
 add_subdirectory(crypto)
 add_subdirectory(ringct)

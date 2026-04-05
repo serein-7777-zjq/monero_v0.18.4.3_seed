@@ -49,6 +49,7 @@
 #include "net/network_throttle-detail.hpp"
 #include "common/pruning.h"
 #include "common/util.h"
+#include "common/eclipse_trace.h"
 #include "misc_log_ex.h"
 #include "p2p/net_peerlist.h"
 
@@ -1721,10 +1722,8 @@ skip:
   {
     const uint64_t target = m_core.get_target_blockchain_height();
     const uint64_t height = m_core.get_current_blockchain_height();
-    if (target > height) // if we're not synced yet, don't do it
-      return true;
 
-    MTRACE("Checking for outgoing syncing peers...");
+    unsigned n_out = 0, n_syncing_total = 0, n_normal_total = 0;
     std::unordered_map<epee::net_utils::zone, unsigned> n_syncing, n_synced;
     std::unordered_map<epee::net_utils::zone, boost::uuids::uuid> last_synced_peer_id;
     std::vector<epee::net_utils::zone> zones;
@@ -1732,6 +1731,12 @@ skip:
     {
       if (!peer_id || context.m_is_income) // only consider connected outgoing peers
         return true;
+
+      ++n_out;
+      if (context.m_state == cryptonote_connection_context::state_synchronizing)
+        ++n_syncing_total;
+      if (context.m_state == cryptonote_connection_context::state_normal)
+        ++n_normal_total;
 
       const epee::net_utils::zone zone = context.m_remote_address.get_zone();
       if (n_syncing.find(zone) == n_syncing.end())
@@ -1753,6 +1758,19 @@ skip:
       return true;
     });
 
+    if (target > height) // if we're not synced yet, don't do it
+    {
+      eclipse_trace::uss_trigger(false, n_out, n_syncing_total, n_normal_total, nullptr, 0, 0);
+      return true;
+    }
+
+    MTRACE("Checking for outgoing syncing peers...");
+    bool fired = false;
+    std::string dropped_ip;
+    uint16_t dropped_port = 0;
+    int64_t dropped_age_s = 0;
+    bool have_drop_info = false;
+
     for (const auto& zone : zones)
     {
       const unsigned int max_out_peers = get_max_out_peers(zone);
@@ -1769,12 +1787,23 @@ skip:
             connections_log << "[" << getCurrentTimeSecAsString() << "]: [" << ctx.m_remote_address.str() << "] dropping synced peer, " << n_syncing[zone] << " syncing, " << n_synced[zone] << " synced, " << max_out_peers << " max out peers\n";
             connections_log.close();
           }
+          eclipse_trace::uss_notify_drop();
+          if (!have_drop_info)
+          {
+            dropped_ip = ctx.m_remote_address.host_str();
+            dropped_port = ctx.m_remote_address.port();
+            dropped_age_s = static_cast<int64_t>(time(nullptr) - ctx.m_started);
+            have_drop_info = true;
+          }
+          fired = true;
           drop_connection(ctx, false, false);
           return true;
         }))
           MDEBUG("Failed to find peer we wanted to drop");
       }
     }
+
+    eclipse_trace::uss_trigger(fired, n_out, n_syncing_total, n_normal_total, have_drop_info ? &dropped_ip : nullptr, dropped_port, dropped_age_s);
 
     return true;
   }
