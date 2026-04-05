@@ -40,6 +40,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <list>
 #include <ctime>
+#include <fstream>
 
 #include <cryptonote_core/cryptonote_core.h>
 #include "cryptonote_protocol/cryptonote_protocol_handler.h"
@@ -49,6 +50,7 @@
 #include "common/pruning.h"
 #include "common/util.h"
 #include "misc_log_ex.h"
+#include "p2p/net_peerlist.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "net.cn"
@@ -81,6 +83,9 @@
 #define DROP_ON_SYNC_WEDGE_THRESHOLD (30 * 1000000000ull) // nanoseconds
 #define LAST_ACTIVITY_STALL_THRESHOLD (2.0f) // seconds
 #define DROP_PEERS_ON_SCORE -2
+
+// Log file path for connection logs
+static const std::string connections_log_file = "./" + dateString + "_connections.log";
 
 namespace cryptonote
 {
@@ -1758,6 +1763,12 @@ skip:
       {
         if (!m_p2p->for_connection(last_synced_peer_id[zone], [&](cryptonote_connection_context& ctx, nodetool::peerid_type peer_id, uint32_t f)->bool{
           MINFO(ctx << "dropping synced peer, " << n_syncing[zone] << " syncing, " << n_synced[zone] << " synced, " << max_out_peers << " max out peers");
+          std::ofstream connections_log(connections_log_file, std::ios::app);
+          if (connections_log.is_open())
+          {
+            connections_log << "[" << getCurrentTimeSecAsString() << "]: [" << ctx.m_remote_address.str() << "] dropping synced peer, " << n_syncing[zone] << " syncing, " << n_synced[zone] << " synced, " << max_out_peers << " max out peers\n";
+            connections_log.close();
+          }
           drop_connection(ctx, false, false);
           return true;
         }))
